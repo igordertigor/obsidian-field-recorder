@@ -203,15 +203,12 @@ export class FieldRecorderModel extends Component {
 			return settings.deviceId !== deviceId && inputDeviceIDs.has(deviceId);
 		});
 
-		// Always refresh the known device list, even if it doesn't warrant a
-		// restart below. Otherwise a richer list arriving later (e.g. Android's
-		// enumerateDevices() filling in beyond "default") can be ignored.
-		batch(() => {
-			this.state.inputDevices.value = inputDevices;
-			if (lostDevice || (gainedDevice && mode === "monitor")) {
+		if (lostDevice || (gainedDevice && mode === "monitor")) {
+			batch(() => {
+				this.state.inputDevices.value = inputDevices;
 				this.stopAll(); // Plugin will restart mic automatically.
-			}
-		});
+			});
+		}
 	}
 
 	addEventListener(
