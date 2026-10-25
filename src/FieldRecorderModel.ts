@@ -71,6 +71,11 @@ export class FieldRecorderModel extends Component {
 		this.graph = this.addChild(await AudioGraph.createGraph(inputSettings));
 		this.state.inputDevices.value = await this.getInputDevices();
 
+		// Derive capabilities from the live track rather than the InputDeviceInfo
+		// returned by enumerateDevices(): on some platforms (observed on
+		// Android) the latter under-reports what the device actually supports.
+		this.state.activeTrackCapabilities.value = this._getActiveTrackCapabilities();
+
 		resetSampleWindow(this.state.sampleWindow);
 
 		this.state.mode.value = "monitor";
@@ -82,8 +87,18 @@ export class FieldRecorderModel extends Component {
 
 		this.removeChild(this.graph!);
 		this.graph = null;
+		this.state.activeTrackCapabilities.value = null;
 
 		mode.value = "off";
+	}
+
+	private _getActiveTrackCapabilities(): MediaTrackCapabilities | null {
+		try {
+			return this.graph?.stream.getAudioTracks()[0]?.getCapabilities() ?? null;
+		} catch (error) {
+			console.error("[fieldrec] Failed to read active track capabilities", error);
+			return null;
+		}
 	}
 
 	startRecording() {
@@ -188,12 +203,15 @@ export class FieldRecorderModel extends Component {
 			return settings.deviceId !== deviceId && inputDeviceIDs.has(deviceId);
 		});
 
-		if (lostDevice || (gainedDevice && mode === "monitor")) {
-			batch(() => {
-				this.state.inputDevices.value = inputDevices;
+		// Always refresh the known device list, even if it doesn't warrant a
+		// restart below. Otherwise a richer list arriving later (e.g. Android's
+		// enumerateDevices() filling in beyond "default") can be ignored.
+		batch(() => {
+			this.state.inputDevices.value = inputDevices;
+			if (lostDevice || (gainedDevice && mode === "monitor")) {
 				this.stopAll(); // Plugin will restart mic automatically.
-			});
-		}
+			}
+		});
 	}
 
 	addEventListener(
